@@ -58,7 +58,7 @@ class Seq2SeqAttrs:
         self.num_rnn_layers = int(model_kwargs.get('num_rnn_layers', 1))
         self.rnn_units = int(model_kwargs.get('rnn_units'))
         self.hidden_state_size = self.num_nodes * self.rnn_units
-        
+        self.model = model_kwargs.get('model')
 
 class EncoderModel(nn.Module, Seq2SeqAttrs):
     def __init__(self, **model_kwargs):
@@ -128,7 +128,7 @@ class DecoderModel(nn.Module, Seq2SeqAttrs):
         return output, torch.stack(hidden_states)
 
 
-class GTSModel(nn.Module, Seq2SeqAttrs):
+class GCRNModel(nn.Module, Seq2SeqAttrs):
     def __init__(self, temperature, logger, **model_kwargs):
         super().__init__()
         Seq2SeqAttrs.__init__(self, **model_kwargs)
@@ -139,18 +139,20 @@ class GTSModel(nn.Module, Seq2SeqAttrs):
         print(self.use_curriculum_learning)
         self._logger = logger
         self.temperature = temperature
-        self.dim_fc = int(model_kwargs.get('dim_fc', False))
-        self.embedding_dim = 32
-        self.conv1 = torch.nn.Conv1d(1, 8, 10, stride=1)  # .to(device)
-        self.conv2 = torch.nn.Conv1d(8, 16, 10, stride=1)  # .to(device)
-        self.hidden_drop = torch.nn.Dropout(0.2)
-        self.fc = torch.nn.Linear(self.dim_fc, self.embedding_dim)
-        self.bn1 = torch.nn.BatchNorm1d(8)
-        self.bn2 = torch.nn.BatchNorm1d(16)
-        self.bn3 = torch.nn.BatchNorm1d(self.embedding_dim)
-        self.fc_out = nn.Linear(self.embedding_dim * 2, self.embedding_dim)
-        ## sửa ở đây 2->1
-        self.fc_cat = nn.Linear(self.embedding_dim, 2)
+        # self.dim_fc = int(model_kwargs.get('dim_fc', False))
+        # self.embedding_dim = 40
+        # self.conv1 = torch.nn.Conv1d(1, 8, 3, stride=3)  # .to(device)
+        # self.conv2 = torch.nn.Conv1d(8, 16, 3, stride=4)
+        # self.conv3 = torch.nn.Conv1d(16, 64, 3, stride=7)  # .to(device)
+        # self.hidden_drop = torch.nn.Dropout(0.2)
+        # self.fc = torch.nn.Linear(self.dim_fc, self.embedding_dim)
+        # self.bn1 = torch.nn.BatchNorm1d(8)
+        # self.bn2 = torch.nn.BatchNorm1d(16)
+        # self.bn4 = torch.nn.BatchNorm1d(64)
+        # self.bn3 = torch.nn.BatchNorm1d(self.embedding_dim)
+        # self.fc_out = nn.Linear(self.embedding_dim * 2, self.embedding_dim)
+        # self.fc_cat = nn.Linear(self.embedding_dim, 2)
+
         def encode_onehot(labels):
             classes = set(labels)
             classes_dict = {c: np.identity(len(classes))[i, :] for i, c in
@@ -210,74 +212,77 @@ class GTSModel(nn.Module, Seq2SeqAttrs):
         outputs = torch.stack(outputs)
         return outputs
 
-    # def clustering(self, adj, hidden, num_resolution=3, num_cluster=[216,18,1]):
-            
-    #         adj = adj.cpu().detach().numpy()
 
-    #         cluster = SpectralClustering(n_clusters=18, random_state=0).fit(adj)
-    #         #print(cluster.labels_)
-    #         labels = np.unique(cluster.labels_, return_counts=True)
-    #         clusters={}
-    #         for i in range(len(labels[0])):
-    #             clusters[i] =   labels[1][i]
-    #         print('')
-    #         return clusters , adj
-
-
-    def forward(self, label, inputs, node_feas, temp, gumbel_soft, labels=None, batches_seen=None):
+    def forward(self, label, inputs, node_feas, lasso, temp, gumbel_soft, len_interval,labels=None, batches_seen=None):
         """
         :param inputs: shape (seq_len, batch_size, num_sensor * input_dim)
         :param labels: shape (horizon, batch_size, num_sensor * output)
         :param batches_seen: batches seen till now
         :return: output: (self.horizon, batch_size, self.num_nodes * self.output_dim)
         """
-        x = node_feas.transpose(1, 0).view(self.num_nodes, 1, -1)
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.bn1(x)
+        batch_size= inputs.shape[1]
+        # if self.model== 'end2end':
+        #     x = node_feas.transpose(1, 0).view(self.num_nodes, 1, -1)
+            
+        #     x = self.conv1(x)
+        #     x = F.relu(x)
+        #     x = self.bn1(x)
+            
+        #     x = self.conv2(x)
+        #     x = F.relu(x)
+        #     x = self.bn2(x)
+            
+
+        #     # x = self.conv3(x)
+        #     # x = F.relu(x)
+        #     # x = self.bn4(x)
+
+            
+        #     x = x.view(self.num_nodes, -1)
+        #     x = self.fc(x)
+        #     x = F.relu(x)
+        #     x = self.bn3(x)
         
-        # x = self.hidden_drop(x)
         
-        x = x.view(self.num_nodes, -1)
-        x = self.fc(x)
-        x = F.relu(x)
-        x = self.bn3(x)
-        
-        # x = self.conv2(x)
-        # x = F.relu(x)
-        # x = self.bn2(x)
-        # x = x.view(self.num_nodes, -1)
-        # x = self.fc(x)
-        # x = F.relu(x)
-        # x = self.bn3(x)
-        #print('x', x.size())
-        receivers = torch.matmul(self.rel_rec, x)
-        senders = torch.matmul(self.rel_send, x)
-        x = torch.cat([senders, receivers], dim=1)
-        x = torch.relu(self.fc_out(x))
-        x = self.fc_cat(x)
-        
-        #x= self.fc_cat(torch.relu(x))
-        #print('x', x.size())
-        # A=torch.matmul(x,x.T)
-        # x=A
-        # print(A)
-        # print('x', x[:])
-        # 
-        #x= x.masked_fill(mask,0)
-        
-        adj = gumbel_softmax(x, temperature=temp, hard=True)
-        adj = adj[:, 0].clone().reshape(self.num_nodes, -1)
-        
-        mask = torch.eye(self.num_nodes, self.num_nodes).bool().to(device)
-        adj.masked_fill_(mask, 0)
+        #     receivers = torch.matmul(self.rel_rec, x)
+        #     senders = torch.matmul(self.rel_send, x)
+        #     x = torch.cat([senders, receivers], dim=1)
+        #     x = torch.relu(self.fc_out(x))
+        #     x = self.fc_cat(x)
+      
+        #     adj = gumbel_softmax(x, temperature=temp, hard=True)
+        #     adj = adj[:, 0].clone().reshape(self.num_nodes, -1)
+            
+        #     mask = torch.eye(self.num_nodes, self.num_nodes).bool().to(device)
+        #     adj.masked_fill_(mask, 0)
 
 
-        #hier_graph=  
+        if self.model == "GCRN_full":
+            adj = torch.ones(self.num_nodes).bool().to(device) 
+        elif self.model == "static_lasso":
+            adj = gumbel_softmax(lasso, temperature=temp, hard=True)
+            adj = adj[:].clone().to(torch.float32)
 
-        encoder_hidden_state = self.encoder(inputs, adj)
+
+        elif self.model == "dynamic_lasso":
+            i= int(batches_seen*batch_size/len_interval)
+            if i< lasso.shape[0]-1:
+                adj = gumbel_softmax(lasso[i:i+2], temperature=temp, hard=True).to(device)
+            else:
+                adj = gumbel_softmax(torch.stack((lasso[-1],lasso[-1]),), temperature=temp, hard=True).to(device)
+            adj = adj[:].clone().to(torch.float32)
+
+        if adj.ndim >2:            
+            encoder_hidden_state = 0.5* (self.encoder(inputs, adj[0]) + self.encoder(inputs, adj[1]))
+        else:
+            encoder_hidden_state = self.encoder(inputs, adj)
+
         self._logger.debug("Encoder complete, starting decoder")
-        outputs = self.decoder(encoder_hidden_state, adj, labels, batches_seen=batches_seen)
+        if adj.ndim >2:            
+            outputs = self.decoder(encoder_hidden_state, adj[1], labels, batches_seen=batches_seen)
+        else:
+            outputs = self.decoder(encoder_hidden_state, adj, labels, batches_seen=batches_seen)
+        #outputs = self.decoder(encoder_hidden_state, adj, labels, batches_seen=batches_seen)
         self._logger.debug("Decoder complete")
         if batches_seen == 0:
             self._logger.info(
@@ -285,6 +290,6 @@ class GTSModel(nn.Module, Seq2SeqAttrs):
             )
 
         #clust_adj= self.clustering(adj, x)
-        return outputs, x.softmax(-1)[:,0].clone().reshape(self.num_nodes, -1) ,adj
+        return outputs ,adj
 
         

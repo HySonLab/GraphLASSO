@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            //"program": "eval_baseline_methods.py",
+            "program":"train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config_filename", "data/config/para_CA1_Food1.yaml", "--temperature", "0.5"],
+            //"args": ["--config_filename", "data/config/para_solar.yaml", "--temperature", "0.5"],
+            //"args": ["--traffic_reading_filename","data/multivariate-time-series-data-master/solar-energy/solar_AL.txt", "--n_forwards", "daily" ,"--n_lags", "12"],
+            //"args": ["--traffic_reading_filename","data/multivariate-time-series-data-master/electricity/electricity.txt", "--n_forwards", "daily","--n_lags", "12" ],
+            //"args": ["--reading_filename","data/CA1_Food1.csv", "--n_forwards", "weekly","--n_lags", "28" ],
+
+            "env": {"CUDA_LAUNCH_BLOCKING": "1"}
+        }
+    ]
+}

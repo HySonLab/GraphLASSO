@@ -66,8 +66,8 @@ def generate_graph_seq2seq_io_data(
     x = np.stack(x, axis=0)
     y = np.stack(y, axis=0)
     # print(x.shape)
-    print(x_t[0,...])
-    print(y_t[0,...])
+    # print(x_t[0,...])
+    # print(y_t[0,...])
 
     return x, y
 
@@ -163,16 +163,16 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output_dir", type=str, default="data/F1_roll7", help="Output directory."
+        "--output_dir", type=str, default="data/CA1_Food1", help="Output directory."
     )
     parser.add_argument(
         "--df_filename",
         type=str,
-        default="data/F1_roll7.csv",
+        default="data/CA1_Food1.csv",
         help="Raw traffic readings.",
     )
     parser.add_argument(
-        "--output_len", type=int, default= 3, help="Output len."
+        "--output_len", type=int, default= 7, help="Output len."
     )
     parser.add_argument(
         "--input_len", type=int, default= 14, help="Input len."

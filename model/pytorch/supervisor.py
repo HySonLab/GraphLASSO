@@ -2,7 +2,8 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from lib import utils
-from model.pytorch.model import GTSModel
+from model.pytorch.model import GCRNModel
+
 from model.pytorch.loss import masked_mae_loss, masked_mape_loss, masked_rmse_loss, masked_mse_loss
 import pandas as pd
 import os
@@ -10,7 +11,7 @@ import time
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class GTSSupervisor:
+class GCRNSupervisor:
     def __init__(self, save_adj_name, temperature, **kwargs):
         self._kwargs = kwargs
         self._data_kwargs = kwargs.get('data')
@@ -24,8 +25,9 @@ class GTSSupervisor:
         self.save_adj_name = save_adj_name
         self.epoch_use_regularization = self._train_kwargs.get('epoch_use_regularization')
         self.num_sample = self._train_kwargs.get('num_sample')
+        #self.lasso = self._data_kwargs.get('lasso')
+        self.model = self._model_kwargs.get('model')
 
-        # logging.
         self._log_dir = self._get_log_dir(kwargs)
         self._writer = SummaryWriter('runs/' + self._log_dir)
         log_level = self._kwargs.get('log_level', 'INFO')
@@ -34,46 +36,30 @@ class GTSSupervisor:
         # data set
         self._data = utils.load_dataset(**self._data_kwargs)
         self.standard_scaler = self._data['scaler']
-        #print(self.standard_scaler)
-        ### Feas
-        if self._data_kwargs['dataset_dir'] == 'data/METR-LA':
-            df = pd.read_hdf('./data/metr-la.h5')
-        elif self._data_kwargs['dataset_dir'] == 'data/PEMS-BAY':
-            df = pd.read_hdf('./data/pems-bay.h5')
-        elif self._data_kwargs['dataset_dir'] == 'data/M5':
-            df = pd.read_csv('./data/dept_store_M5.csv')
-            time_ind=list(df.iloc[:,0].apply(lambda x: x[2:]))
-            df=df.iloc[:,1:]
-            df.index=time_ind
-        elif self._data_kwargs['dataset_dir'] == 'data/M5_CA1':
-            df = pd.read_csv('./data/dept_CA1.csv')
-            time_ind=list(df.iloc[:,0].apply(lambda x: x[2:]))
-            df=df.iloc[:,1:]
-            df.index=time_ind
-        elif self._data_kwargs['dataset_dir'] == 'data/item_CA1':
-            df = pd.read_csv('./data/item_CA1.csv')
-            time_ind=list(df.iloc[:,0].apply(lambda x: x[2:]))
-            df=df.iloc[:,1:]
-            df.index=time_ind
-        elif self._data_kwargs['dataset_dir'] == 'data/item_CA1_50':
-            df = pd.read_csv('./data/item_CA1_50_seed10.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/item_CA1_50_10':
-            df = pd.read_csv('./data/item_CA1_50_seed10.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/CA1_500':
-            df = pd.read_csv('./data/CA1_500.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/CA1_Food1':
+        
+        if self._data_kwargs['dataset_dir'] == 'data/CA1_Food1':
             df = pd.read_csv('./data/CA1_Food1.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/LA-roll3':
-            df = pd.read_csv('./data/LA-roll3.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/LA-rand':
-            df = pd.read_csv('./data/LA_rand.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/LA-half':
-            df = pd.read_csv('./data/LA-half.csv')
-        elif self._data_kwargs['dataset_dir'] == 'data/F1_roll7':
-            df = pd.read_csv('./data/F1_roll7.csv')
-        #else:
-        #    df = pd.read_csv('./data/pmu_normalized.csv', header=None)
-        #    df = df.transpose()
+        elif self._data_kwargs['dataset_dir'] == 'data/Electric':
+            df = pd.read_csv('./data/multivariate-time-series-data-master/electricity/electricity.txt', header=None)
+            df= df.iloc[:,:100]
+        elif self._data_kwargs['dataset_dir'] == 'data/solar':
+            df = pd.read_csv('./data/multivariate-time-series-data-master/solar-energy/solar_AL.txt', header=None)
+        elif self._data_kwargs['dataset_dir'] == 'data/solar1h':
+            df = pd.read_csv('data\multivariate-time-series-data-master\solar-energy\solar1h.csv')
+        elif self._data_kwargs['dataset_dir'] == 'data/CA_1':
+            df= pd.read_csv('./data/CA_1.csv')
+        elif self._data_kwargs['dataset_dir'] == 'data/WI_1':    
+            df= pd.read_csv('./data/WI_1.csv')
+        elif self._data_kwargs['dataset_dir'] == 'data/TX_1':
+            
+            df= pd.read_csv('./data/TX_1.csv')
+        elif self._data_kwargs['dataset_dir'] == 'data/CA_2':
+            
+            df= pd.read_csv('./data/CA_2.csv')
+        elif self._data_kwargs['dataset_dir'] == 'data/TX1_Food1':
+            df = pd.read_csv('./data/TX1_Food1.csv')   
+        elif self._data_kwargs['dataset_dir'] == 'data/WI1_Food1':
+            df = pd.read_csv('./data/WI1_Food1.csv')     
         
         num_samples = df.shape[0]
         num_train = round(num_samples * 0.7)
@@ -86,13 +72,26 @@ class GTSSupervisor:
         self._train_feas = torch.Tensor(train_feas).to(device)
         #print(self._train_feas.shape)
 
-        k = self._train_kwargs.get('knn_k')
-        knn_metric = 'cosine'
-        from sklearn.neighbors import kneighbors_graph
-        g = kneighbors_graph(train_feas.T, k, metric=knn_metric)
-        g = np.array(g.todense(), dtype=np.float32)
-        self.adj_mx = torch.Tensor(g).to(device)
+        # k = self._train_kwargs.get('knn_k')
+        # knn_metric = 'cosine'
+        # from sklearn.neighbors import kneighbors_graph
+        # g = kneighbors_graph(train_feas.T, k, metric=knn_metric)
+        # g = np.array(g.todense(), dtype=np.float32)
+        # self.adj_mx = torch.Tensor(g).to(device)
+
+        if self.model=='static_lasso':
+            tmp=np.load("./" + self._data_kwargs['dataset_dir'] + "/static.npy" , allow_pickle=True)
+            self._lasso= torch.from_numpy(tmp.item()['Theta']).to(device)
+            self._len_interval = 0
+        elif self.model == 'dynamic_lasso':
+            tmp=np.load("./" + self._data_kwargs['dataset_dir'] + "/dynamic.npy", allow_pickle=True )
+            self._len_interval=tmp.item()['len_interval']
+            self._lasso= torch.from_numpy(tmp.item()['Theta']).to(device)    
+        elif self.model =="end2end":
+            self._lasso = 0
+            self._len_interval = 0
         #print([np.sum(g[i]) for i in range(len(g[0]))])
+        self.train_len = train_feas.shape[0]
         self.num_nodes = int(self._model_kwargs.get('num_nodes', 1))
         self.input_dim = int(self._model_kwargs.get('input_dim', 1))
         self.seq_len = int(self._model_kwargs.get('seq_len'))  # for the encoder
@@ -102,11 +101,9 @@ class GTSSupervisor:
         self.horizon = int(self._model_kwargs.get('horizon', 1))  # for the decoder
 
         print(self._model_kwargs)
-        # setup model
-        GTS_model = GTSModel(self.temperature, self._logger, **self._model_kwargs)
-        self.GTS_model = GTS_model.cuda() if torch.cuda.is_available() else GTS_model
+        GCRN_model = GCRNModel(self.temperature, self._logger, **self._model_kwargs)
+        self.GCRN_model = GCRN_model.cuda() if torch.cuda.is_available() else GCRN_model
         self._logger.info("Model created")
-
         self._epoch_num = self._train_kwargs.get('epoch', 0)
         if self._epoch_num > 0:
             self.load_model()
@@ -129,7 +126,7 @@ class GTSSupervisor:
                 filter_type_abbr = 'R'
             elif filter_type == 'dual_random_walk':
                 filter_type_abbr = 'DR'
-            run_id = 'GTS_%s_%d_h_%d_%s_lr_%g_bs_%d_%s/' % (
+            run_id = 'GCRN_%s_%d_h_%d_%s_lr_%g_bs_%d_%s/' % (
                 filter_type_abbr, max_diffusion_step, horizon,
                 structure, learning_rate, batch_size,
                 time.strftime('%m%d%H%M%S'))
@@ -144,7 +141,7 @@ class GTSSupervisor:
             os.makedirs('models/')
 
         config = dict(self._kwargs)
-        config['model_state_dict'] = self.GTS_model.state_dict()
+        config['model_state_dict'] = self.GCRN_model.state_dict()
         config['epoch'] = epoch
         torch.save(config, 'models/epo%d.tar' % epoch)
         self._logger.info("Saved model at {}".format(epoch))
@@ -154,31 +151,31 @@ class GTSSupervisor:
         self._setup_graph()
         assert os.path.exists('models/epo%d.tar' % self._epoch_num), 'Weights at epoch %d not found' % self._epoch_num
         checkpoint = torch.load('models/epo%d.tar' % self._epoch_num, map_location='cpu')
-        self.GTS_model.load_state_dict(checkpoint['model_state_dict'])
+        self.GCRN_model.load_state_dict(checkpoint['model_state_dict'])
         self._logger.info("Loaded model at {}".format(self._epoch_num))
 
     def _setup_graph(self):
         with torch.no_grad():
-            self.GTS_model = self.GTS_model.eval()
+            self.GCRN_model = self.GCRN_model.eval()
 
             val_iterator = self._data['val_loader'].get_iterator()
 
             for _, (x, y) in enumerate(val_iterator):
                 x, y = self._prepare_data(x, y)
-                output = self.GTS_model(x, self._train_feas)
+                output = self.GCRN_model(x, self._train_feas)
                 break
 
     def train(self, **kwargs):
         kwargs.update(self._train_kwargs)
         return self._train(**kwargs)
 
-    def evaluate(self,label, dataset='val', batches_seen=0, gumbel_soft=True):
+    def evaluate(self,label, dataset='val', batches_seen= 42, gumbel_soft=True):
         """
         Computes mean L1Loss
         :return: mean L1Loss
         """
         with torch.no_grad():
-            self.GTS_model = self.GTS_model.eval()
+            self.GCRN_model = self.GCRN_model.eval()
 
             val_iterator = self._data['{}_loader'.format(dataset)].get_iterator()
             losses = []
@@ -200,7 +197,7 @@ class GTSSupervisor:
             for batch_idx, (x, y) in enumerate(val_iterator):
                 x, y = self._prepare_data(x, y)
 
-                output, mid_output,_ = self.GTS_model(label, x, self._train_feas, temp, gumbel_soft)
+                output, mid_output = self.GCRN_model(label, x, self._train_feas,self._lasso, temp, gumbel_soft, self._len_interval, batches_seen= batches_seen)
 
                 if label == 'without_regularization': 
                     loss = self._compute_loss(y, output)
@@ -294,20 +291,21 @@ class GTSSupervisor:
     def _train(self, base_lr,
                steps, patience=200, epochs=100, lr_decay_ratio=0.1, log_every=1, save_model=0,
                test_every_n_epochs=10, epsilon=1e-8, **kwargs):
-        # steps is used in learning rate - will see if need to use it?
         min_val_loss = float('inf')
         wait = 0
         if self.opt == 'adam':
-            optimizer = torch.optim.Adam(self.GTS_model.parameters(), lr=base_lr, eps=epsilon)
+            optimizer = torch.optim.Adam(self.GCRN_model.parameters(), lr=base_lr, eps=epsilon)
             
         elif self.opt == 'sgd':
-            optimizer = torch.optim.SGD(self.GTS_model.parameters(), lr=base_lr)
+            optimizer = torch.optim.SGD(self.GCRN_model.parameters(), lr=base_lr)
         else:
-            optimizer = torch.optim.Adam(self.GTS_model.parameters(), lr=base_lr, eps=epsilon)
+            optimizer = torch.optim.Adam(self.GCRN_model.parameters(), lr=base_lr, eps=epsilon)
 
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=steps, gamma=float(lr_decay_ratio))
 
         self._logger.info('Start training ...')
+        
+            
 
         # this will fail if model is loaded with a changed batch_size
         num_batches = self._data['train_loader'].num_batch
@@ -317,7 +315,7 @@ class GTSSupervisor:
 
         for epoch_num in range(self._epoch_num, epochs):
             print("Num of epoch:",epoch_num)
-            self.GTS_model = self.GTS_model.train()
+            self.GCRN_model = self.GCRN_model.train()
             train_iterator = self._data['train_loader'].get_iterator()
             losses = []
             start_time = time.time()
@@ -332,24 +330,21 @@ class GTSSupervisor:
             for batch_idx, (x, y) in enumerate(train_iterator):
                 optimizer.zero_grad()
                 x, y = self._prepare_data(x, y)
-                output, mid_output, adj= self.GTS_model(label, x, self._train_feas, temp, gumbel_soft, y, batches_seen)
+                output, adj= self.GCRN_model(label, x, self._train_feas, self._lasso, temp, gumbel_soft, self._len_interval, y, batches_seen)
                 if (epoch_num % epochs) == epochs - 1:
-                    output, mid_output = self.GTS_model(label, x, self._train_feas, temp, gumbel_soft, y, batches_seen)
+                    output, mid_output = self.GCRN_model(label, x, self._train_feas, self._lasso, temp, gumbel_soft, self._len_interval ,y, batches_seen)
 
                 if batches_seen == 0:
                     if self.opt == 'adam':
-                        optimizer = torch.optim.Adam(self.GTS_model.parameters(), lr=base_lr, eps=epsilon)
+                        optimizer = torch.optim.Adam(self.GCRN_model.parameters(), lr=base_lr, eps=epsilon)
                         
                     elif self.opt == 'sgd':
-                        optimizer = torch.optim.SGD(self.GTS_model.parameters(), lr=base_lr)
+                        optimizer = torch.optim.SGD(self.GCRN_model.parameters(), lr=base_lr)
                     else:
-                        optimizer = torch.optim.Adam(self.GTS_model.parameters(), lr=base_lr, eps=epsilon)
+                        optimizer = torch.optim.Adam(self.GCRN_model.parameters(), lr=base_lr, eps=epsilon)
 
-                self.GTS_model.to(device)
-                
-                #if batch_idx % 100 == 1:
-                #    temp = np.maximum(temp * np.exp(-self.ANNEAL_RATE * batch_idx), self.temp_min)
-
+                self.GCRN_model.to(device)
+           
                 if label == 'without_regularization':  # or label == 'predictor':
                     #print(type(y))
                     #print(type(output))
@@ -371,8 +366,8 @@ class GTSSupervisor:
                 loss.backward()
 
                 # gradient clipping - this does it in place
-                torch.nn.utils.clip_grad_norm_(self.GTS_model.parameters(), self.max_grad_norm)
-                # print(sum(p.numel() for p in self.GTS_model.parameters()))
+                torch.nn.utils.clip_grad_norm_(self.GCRN_model.parameters(), self.max_grad_norm)
+                # print(sum(p.numel() for p in self.GCRN_model.parameters()))
                 optimizer.step()
             self._logger.info("epoch complete")
             lr_scheduler.step()
