@@ -1,7 +1,0 @@
-2023-07-05 18:07:22,711 - model.pytorch.supervisor - INFO - Log directory: data/model\GCRN_DR_1_h_7_32_lr_0.05_bs_32_0705180722/
-2023-07-05 18:07:23,117 - model.pytorch.supervisor - INFO - Model created
-2023-07-05 18:07:23,132 - model.pytorch.supervisor - INFO - Start training ...
-2023-07-05 18:07:23,133 - model.pytorch.supervisor - INFO - num_batches:42
-2023-07-05 18:07:29,700 - model.pytorch.supervisor - INFO - Total trainable parameters 91123
-2023-07-05 18:08:19,956 - model.pytorch.supervisor - INFO - epoch complete
-2023-07-05 18:08:19,971 - model.pytorch.supervisor - INFO - evaluating now!

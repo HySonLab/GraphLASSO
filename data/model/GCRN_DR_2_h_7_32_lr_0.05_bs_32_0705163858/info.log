@@ -1,4 +1,0 @@
-2023-07-05 16:38:58,530 - model.pytorch.supervisor - INFO - Log directory: data/model\GCRN_DR_2_h_7_32_lr_0.05_bs_32_0705163858/
-2023-07-05 16:38:58,940 - model.pytorch.supervisor - INFO - Model created
-2023-07-05 16:38:58,943 - model.pytorch.supervisor - INFO - Start training ...
-2023-07-05 16:38:58,943 - model.pytorch.supervisor - INFO - num_batches:42
