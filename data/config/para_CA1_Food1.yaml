@@ -1,0 +1,47 @@
+---
+base_dir: data/model
+log_level: INFO
+data:
+  batch_size: 32
+  dataset_dir: data/CA1_Food1
+  test_batch_size: 32
+  val_batch_size: 32
+  graph_pkl_filename: nope
+  scaler: false
+  
+
+  
+model:
+  model: dynamic_lasso
+  cl_decay_steps: 2000
+  filter_type: dual_random_walk
+  horizon: 7
+  input_dim: 1
+  l1_decay: 0
+  max_diffusion_step: 1
+  num_nodes: 216
+  num_rnn_layers: 1
+  output_dim: 1
+  rnn_units: 32
+  seq_len: 14
+  use_curriculum_learning: true
+  dim_fc: 1776 
+  
+train:
+  base_lr: 0.05
+  dropout: 0.1
+  epoch: 0
+  epochs: 100
+  epsilon: 1.0e-3
+  global_step: 0
+  lr_decay_ratio: 0.3
+  max_grad_norm: 5
+  max_to_keep: 100
+  min_learning_rate: 2.0e-05
+  optimizer: adam
+  patience: 100
+  steps: [20, 30, 40]
+  test_every_n_epochs: 3
+  knn_k: 3 # decrease
+  epoch_use_regularization: 2000
+  num_sample: 10
