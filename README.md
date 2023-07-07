@@ -10,8 +10,7 @@ Contributors:
 * Truong Son Hy (Correspondent / PI)
 
 Reference:
-```
-bibtex
+```bibtex
 @article{do2023sparsity,
   title={Sparsity exploitation via discovering graphical models in multi-variate time-series forecasting},
   author={Do, Ngoc-Dung and Hy, Truong Son and Nguyen, Duy Khuong},
