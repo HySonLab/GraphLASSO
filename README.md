@@ -1,5 +1,7 @@
 # Sparsity exploitation via discovering graphical models in multi-variate time-series forecasting
 
+![GraphLASSO](GraphLASSO.png)
+
 Paper:
 https://arxiv.org/pdf/2306.17090.pdf
 
