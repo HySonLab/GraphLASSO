@@ -1,0 +1,1 @@
+Run scripts/generate_training_data.py to create training data
